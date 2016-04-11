@@ -5,3 +5,4 @@ authors = ["lunarpulse <lunarpulse@gmail.com>"]
 
 [dependencies]
 mio = "~0.5.0"
+http-muncher = "0.2.0"
