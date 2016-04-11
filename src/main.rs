@@ -1,20 +1,60 @@
 extern crate mio;
+extern crate http_muncher;
 
 use mio::*;
 use mio::tcp::*;
 use std::net::SocketAddr;
 use std::collections::HashMap;
-
-struct WebSocketServer{
-    socket: TcpListener,
-    clients: HashMap<Token,TcpStream>,
-    token_counter: usize
-}
+use http_muncher::{Parser, ParserHandler};
 
 const SERVER_TOCKEN:Token = Token(0);
 
-impl Handler for WebSocketServer {
+struct HttpParser;
+impl ParserHandler for HttpParser{
+}
 
+struct WebSocketClient{
+    socket: TcpStream,
+    http_parser: Parser<HttpParser>
+}
+
+impl WebSocketClient {
+    fn read(&mut self){
+        loop{
+            let mut buf = [0;2048];
+            match self.socket.try_read(&mut buf) {
+                Err(e) => {
+                    println!("Error while reading socket: {:?}", e );
+                    return
+                },
+                Ok(None) =>
+                break,
+                Ok(Some(len))=>{
+                    self.http_parser.parse(&buf[0..len]);
+                    if self.http_parser.is_upgrade(){
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    fn new(socket: TcpStream) -> WebSocketClient {
+        WebSocketClient{
+            socket:socket,
+            http_parser: Parser::request(HttpParser)
+        }
+    }
+
+}
+
+struct WebSocketServer{
+    socket: TcpListener,
+    clients: HashMap<Token,WebSocketClient>,
+    token_counter: usize
+}
+
+impl Handler for WebSocketServer {
  // Traits can have useful default implementations, so in fact the handler
  // interface requires us to provide only two things: concrete types for
  // timeouts and messages.
@@ -39,11 +79,16 @@ impl Handler for WebSocketServer {
              self.token_counter +=1;
              let new_token = Token(self.token_counter);
 
-             self.clients.insert(new_token, client_socket);
-             event_loop.register(&self.clients[&new_token],
+             self.clients.insert(new_token, WebSocketClient::new(client_socket));
+             event_loop.register(&self.clients[&new_token].socket,
                                     new_token,EventSet::readable(),
                                     PollOpt::edge()|PollOpt::oneshot()).unwrap();
 
+         },
+         token => {
+             let mut client = self.clients.get_mut(&token).unwrap();
+             client.read();
+             event_loop.reregister(&client.socket, token, EventSet::readable(),PollOpt::edge()|PollOpt::oneshot()).unwrap();
          }
      }
  }
