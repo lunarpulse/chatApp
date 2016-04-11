@@ -5,6 +5,6 @@ authors = ["lunarpulse <lunarpulse@gmail.com>"]
 
 [dependencies]
 mio = "~0.5.0"
-http-muncher = "^0.2.3"
-rustc-serialize = "^0.3.15"
+http-muncher = "0.2.1"
+rustc-serialize = "^0.3.19"
 sha1 = "^0.1.1"
